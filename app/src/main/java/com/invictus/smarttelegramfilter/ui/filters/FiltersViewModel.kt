@@ -6,6 +6,7 @@ import com.invictus.smarttelegramfilter.data.db.entity.ChannelFilter
 import com.invictus.smarttelegramfilter.data.db.entity.ChannelFilterWithKeywords
 import com.invictus.smarttelegramfilter.data.db.entity.Keyword
 import com.invictus.smarttelegramfilter.data.repository.FilterRepository
+import com.invictus.smarttelegramfilter.data.repository.MessageRepository
 import com.invictus.smarttelegramfilter.telegram.TdlibClient
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.drinkless.tdlib.TdApi
@@ -23,11 +25,16 @@ import javax.inject.Inject
 @HiltViewModel
 class FiltersViewModel @Inject constructor(
     private val filterRepo: FilterRepository,
+    private val messageRepo: MessageRepository,
     private val tdlib: TdlibClient,
 ) : ViewModel() {
 
     val channels: StateFlow<List<ChannelFilterWithKeywords>> = filterRepo.observeAllChannels()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val matchCountByChannel: StateFlow<Map<Long, Int>> = messageRepo.observeMatchCountByChannel()
+        .map { list -> list.associate { it.channelId to it.count } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()

@@ -10,7 +10,7 @@ import com.invictus.smarttelegramfilter.data.db.entity.MatchedMessage
 
 @Database(
     entities = [ChannelFilter::class, Keyword::class, MatchedMessage::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

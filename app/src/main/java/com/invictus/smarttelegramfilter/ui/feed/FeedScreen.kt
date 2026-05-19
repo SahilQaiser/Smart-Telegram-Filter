@@ -1,10 +1,14 @@
 package com.invictus.smarttelegramfilter.ui.feed
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,19 +24,29 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.MarkEmailRead
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
@@ -40,8 +54,8 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,8 +78,6 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import android.content.Intent
-import android.net.Uri
 import com.invictus.smarttelegramfilter.data.db.entity.MatchedMessage
 import com.invictus.smarttelegramfilter.notification.buildTelegramDeepLink
 import java.text.SimpleDateFormat
@@ -78,17 +90,24 @@ fun FeedScreen(
     viewModel: FeedViewModel,
     onNavigateToFilters: () -> Unit,
 ) {
-    val messages    by viewModel.messages.collectAsStateWithLifecycle()
-    val unreadCount by viewModel.unreadCount.collectAsStateWithLifecycle()
+    val messages        by viewModel.messages.collectAsStateWithLifecycle()
+    val hasMessages     by viewModel.hasMessages.collectAsStateWithLifecycle()
+    val unreadCount     by viewModel.unreadCount.collectAsStateWithLifecycle()
+    val channelKeywords by viewModel.channelKeywords.collectAsStateWithLifecycle()
+    val searchQuery     by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val archivedMessages by viewModel.archivedMessages.collectAsStateWithLifecycle()
+    val archivedCount   by viewModel.archivedCount.collectAsStateWithLifecycle()
 
-    var showClearDialog by remember { mutableStateOf(false) }
-    val expandedIds     = remember { mutableStateOf(setOf<Long>()) }
+    var showClearDialog  by remember { mutableStateOf(false) }
+    var showArchive      by remember { mutableStateOf(false) }
+    val expandedIds      = remember { mutableStateOf(setOf<Long>()) }
+    val archiveSheetState = rememberModalBottomSheetState()
 
     if (showClearDialog) {
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
             title = { Text("Clear all messages?") },
-            text  = { Text("This will permanently delete all ${messages.size} matched messages.") },
+            text  = { Text("This will permanently delete all matched messages (archive not affected).") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteAll()
@@ -98,6 +117,17 @@ fun FeedScreen(
             dismissButton = {
                 TextButton(onClick = { showClearDialog = false }) { Text("Cancel") }
             },
+        )
+    }
+
+    if (showArchive) {
+        ArchiveSheet(
+            messages   = archivedMessages,
+            sheetState = archiveSheetState,
+            onDismiss  = { showArchive = false },
+            onUnarchive = viewModel::unarchive,
+            onDelete   = viewModel::delete,
+            onClearAll = viewModel::clearArchive,
         )
     }
 
@@ -112,11 +142,7 @@ fun FeedScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                        Text(
-                            " Filter",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Normal,
-                        )
+                        Text(" Filter", style = MaterialTheme.typography.titleLarge)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -128,17 +154,23 @@ fun FeedScreen(
                             Icon(Icons.Default.MarkEmailRead, contentDescription = "Mark all read")
                         }
                     }
-                    if (messages.isNotEmpty()) {
+                    // Archive icon with badge
+                    IconButton(onClick = { showArchive = true }) {
+                        BadgedBox(badge = {
+                            if (archivedCount > 0) Badge { Text(archivedCount.toString()) }
+                        }) {
+                            Icon(Icons.Default.Inbox, contentDescription = "Archive")
+                        }
+                    }
+                    if (hasMessages) {
                         IconButton(onClick = { showClearDialog = true }) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = "Clear all messages")
+                            Icon(Icons.Default.DeleteSweep, contentDescription = "Clear all")
                         }
                     }
                     IconButton(onClick = onNavigateToFilters) {
-                        BadgedBox(
-                            badge = {
-                                if (unreadCount > 0) Badge { Text(unreadCount.toString()) }
-                            }
-                        ) {
+                        BadgedBox(badge = {
+                            if (unreadCount > 0) Badge { Text(unreadCount.toString()) }
+                        }) {
                             Icon(Icons.Default.FilterList, contentDescription = "Manage filters")
                         }
                     }
@@ -146,39 +178,183 @@ fun FeedScreen(
             )
         }
     ) { padding ->
-        if (messages.isEmpty()) {
+        if (!hasMessages) {
             EmptyFeed(modifier = Modifier.padding(padding))
         } else {
-            LazyColumn(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
             ) {
-                items(messages, key = { it.id }) { msg ->
-                    val expanded = msg.id in expandedIds.value
-                    val dismissState = rememberSwipeToDismissBoxState()
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.searchQuery.value = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    placeholder = { Text("Search messages…") },
+                    singleLine = true,
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null,
+                            modifier = Modifier.size(20.dp))
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.searchQuery.value = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    ),
+                )
 
-                    LaunchedEffect(dismissState.currentValue) {
-                        if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
-                            viewModel.delete(msg)
+                if (messages.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            "No messages match \"$searchQuery\"",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        items(messages, key = { it.id }) { msg ->
+                            val expanded = msg.id in expandedIds.value
+                            val dismissState = rememberSwipeToDismissBoxState()
+
+                            LaunchedEffect(dismissState.currentValue) {
+                                if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
+                                    viewModel.archive(msg)
+                                }
+                            }
+
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                backgroundContent = {
+                                    val isStart = dismissState.dismissDirection ==
+                                            SwipeToDismissBoxValue.StartToEnd
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                MaterialTheme.colorScheme.tertiaryContainer,
+                                                MaterialTheme.shapes.medium,
+                                            ),
+                                        contentAlignment = if (isStart) Alignment.CenterStart
+                                                           else Alignment.CenterEnd,
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Archive,
+                                            contentDescription = "Archive",
+                                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            modifier = Modifier.padding(horizontal = 20.dp),
+                                        )
+                                    }
+                                },
+                            ) {
+                                MessageCard(
+                                    message         = msg,
+                                    expanded        = expanded,
+                                    channelKeywords = channelKeywords[msg.channelId] ?: emptyList(),
+                                    onClick = {
+                                        expandedIds.value = if (expanded)
+                                            expandedIds.value - msg.id
+                                        else
+                                            expandedIds.value + msg.id
+                                        if (!msg.isRead) viewModel.markRead(msg.id)
+                                    },
+                                )
+                            }
                         }
                     }
+                }
+            }
+        }
+    }
+}
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ArchiveSheet(
+    messages: List<MatchedMessage>,
+    sheetState: androidx.compose.material3.SheetState,
+    onDismiss: () -> Unit,
+    onUnarchive: (MatchedMessage) -> Unit,
+    onDelete: (MatchedMessage) -> Unit,
+    onClearAll: () -> Unit,
+) {
+    var showClearDialog by remember { mutableStateOf(false) }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear archive?") },
+            text  = { Text("Permanently delete all ${messages.size} archived messages.") },
+            confirmButton = {
+                TextButton(onClick = { onClearAll(); showClearDialog = false; onDismiss() }) {
+                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Archive (${messages.size})", style = MaterialTheme.typography.titleMedium)
+            if (messages.isNotEmpty()) {
+                TextButton(onClick = { showClearDialog = true }) {
+                    Text("Clear all", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+        HorizontalDivider()
+        if (messages.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("Archive is empty", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(messages, key = { it.id }) { msg ->
+                    val dismissState = rememberSwipeToDismissBoxState()
+                    LaunchedEffect(dismissState.currentValue) {
+                        if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
+                            onDelete(msg)
+                        }
+                    }
                     SwipeToDismissBox(
                         state = dismissState,
                         backgroundContent = {
-                            val color = MaterialTheme.colorScheme.errorContainer
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(vertical = 0.dp)
-                                    .background(color, MaterialTheme.shapes.medium),
-                                contentAlignment = when (dismissState.dismissDirection) {
-                                    SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
-                                    else -> Alignment.CenterEnd
-                                },
+                                    .background(
+                                        MaterialTheme.colorScheme.errorContainer,
+                                        MaterialTheme.shapes.medium,
+                                    ),
+                                contentAlignment = Alignment.CenterEnd,
                             ) {
                                 Icon(
                                     Icons.Default.Delete,
@@ -189,17 +365,7 @@ fun FeedScreen(
                             }
                         },
                     ) {
-                        MessageCard(
-                            message  = msg,
-                            expanded = expanded,
-                            onClick  = {
-                                expandedIds.value = if (expanded)
-                                    expandedIds.value - msg.id
-                                else
-                                    expandedIds.value + msg.id
-                                if (!msg.isRead) viewModel.markRead(msg.id)
-                            },
-                        )
+                        ArchivedMessageRow(msg, onUnarchive = { onUnarchive(msg) })
                     }
                 }
             }
@@ -208,7 +374,51 @@ fun FeedScreen(
 }
 
 @Composable
-private fun MessageCard(message: MatchedMessage, expanded: Boolean, onClick: () -> Unit) {
+private fun ArchivedMessageRow(message: MatchedMessage, onUnarchive: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    message.channelName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    message.textContent,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onUnarchive) {
+                Icon(
+                    Icons.Default.Unarchive,
+                    contentDescription = "Restore",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MessageCard(
+    message: MatchedMessage,
+    expanded: Boolean,
+    channelKeywords: List<String>,
+    onClick: () -> Unit,
+) {
     val context = LocalContext.current
     val unread = !message.isRead
     Card(
@@ -222,69 +432,96 @@ private fun MessageCard(message: MatchedMessage, expanded: Boolean, onClick: () 
             else
                 MaterialTheme.colorScheme.surface,
         ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (unread) 4.dp else 1.dp,
-        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (unread) 4.dp else 1.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            // Unread accent strip
             Box(
                 modifier = Modifier
                     .width(3.dp)
                     .fillMaxHeight()
                     .background(
-                        color = if (unread) MaterialTheme.colorScheme.primary
+                        if (unread) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.surface,
                     )
             )
-            Row(
+            Column(
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.Top,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = message.channelName,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = formatTimestamp(message.timestamp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.alpha(0.7f),
-                        )
-                    }
-                    Spacer(Modifier.height(2.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
-                        text = message.senderName,
-                        style = MaterialTheme.typography.bodySmall,
+                        text = message.channelName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = if (unread) FontWeight.Bold else FontWeight.Normal,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = formatTimestamp(message.timestamp),
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.alpha(0.7f),
                     )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = highlightKeyword(message.textContent, message.matchedKeyword),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = if (expanded) Int.MAX_VALUE else 3,
-                        overflow = if (expanded) TextOverflow.Clip else TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        KeywordChip(message.matchedKeyword)
-                        if (expanded) {
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = message.senderName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = highlightKeyword(message.textContent, message.matchedKeyword),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = if (expanded) Int.MAX_VALUE else 3,
+                    overflow = if (expanded) TextOverflow.Clip else TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    KeywordChip(message.matchedKeyword)
+                    if (expanded) {
+                        Row {
+                            // Share
+                            IconButton(
+                                onClick = {
+                                    val shareText = buildString {
+                                        append(message.channelName)
+                                        append("\n\n")
+                                        append(message.textContent)
+                                        append("\n\n# ")
+                                        append(message.matchedKeyword)
+                                    }
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(Intent.EXTRA_TEXT, shareText)
+                                            },
+                                            "Share message",
+                                        )
+                                    )
+                                },
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Share,
+                                    contentDescription = "Share",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            // Open in Telegram
                             TextButton(
                                 onClick = {
                                     val url = buildTelegramDeepLink(
@@ -300,11 +537,27 @@ private fun MessageCard(message: MatchedMessage, expanded: Boolean, onClick: () 
                                 },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                             ) {
-                                Text(
-                                    "Open in Telegram",
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
+                                Text("Open in Telegram", style = MaterialTheme.typography.labelSmall)
                             }
+                        }
+                    }
+                }
+
+                if (expanded) {
+                    val others = channelKeywords.filter {
+                        it.lowercase() != message.matchedKeyword.lowercase()
+                    }
+                    if (others.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Also tracking:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.alpha(0.7f),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            others.forEach { kw -> KeywordChip(kw, dimmed = true) }
                         }
                     }
                 }
@@ -314,17 +567,22 @@ private fun MessageCard(message: MatchedMessage, expanded: Boolean, onClick: () 
 }
 
 @Composable
-private fun KeywordChip(keyword: String) {
+private fun KeywordChip(keyword: String, dimmed: Boolean = false) {
     Surface(
         shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.secondaryContainer,
+        color = if (dimmed)
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+        else
+            MaterialTheme.colorScheme.secondaryContainer,
     ) {
         Text(
             text = "# $keyword",
             style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = if (dimmed) FontWeight.Normal else FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier
+                .alpha(if (dimmed) 0.6f else 1f)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
         )
     }
 }
@@ -363,7 +621,6 @@ private sealed interface Span {
 private fun highlightKeyword(text: String, keyword: String): androidx.compose.ui.text.AnnotatedString {
     val lower = text.lowercase()
     val kw = keyword.lowercase()
-
     val spans = mutableListOf<Span>()
     URL_REGEX.findAll(text).forEach { spans.add(Span.Url(it.range.first, it.range.last + 1, it.value)) }
     if (kw.isNotEmpty()) {
@@ -372,27 +629,22 @@ private fun highlightKeyword(text: String, keyword: String): androidx.compose.ui
             val idx = lower.indexOf(kw, pos)
             if (idx == -1) break
             val kwEnd = idx + kw.length
-            if (spans.filterIsInstance<Span.Url>().none { idx in it.start until it.end }) {
+            if (spans.filterIsInstance<Span.Url>().none { idx in it.start until it.end })
                 spans.add(Span.Keyword(idx, kwEnd))
-            }
             pos = kwEnd
         }
     }
     spans.sortBy { it.start }
-
     return buildAnnotatedString {
         var cursor = 0
         for (span in spans) {
             if (span.start > cursor) append(text.substring(cursor, span.start))
             when (span) {
                 is Span.Url -> withLink(
-                    LinkAnnotation.Url(
-                        span.url,
-                        TextLinkStyles(SpanStyle(
-                            color = androidx.compose.ui.graphics.Color(0xFF1565C0),
-                            textDecoration = TextDecoration.Underline,
-                        ))
-                    )
+                    LinkAnnotation.Url(span.url, TextLinkStyles(SpanStyle(
+                        color = androidx.compose.ui.graphics.Color(0xFF1565C0),
+                        textDecoration = TextDecoration.Underline,
+                    )))
                 ) { append(text.substring(span.start, span.end)) }
                 is Span.Keyword -> withStyle(SpanStyle(
                     fontWeight = FontWeight.Bold,

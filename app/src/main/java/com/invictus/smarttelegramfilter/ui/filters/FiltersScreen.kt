@@ -58,8 +58,9 @@ import com.invictus.smarttelegramfilter.data.db.entity.ChannelFilterWithKeywords
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FiltersScreen(viewModel: FiltersViewModel, onBack: () -> Unit, onBrowseChannels: () -> Unit) {
-    val channels  by viewModel.channels.collectAsStateWithLifecycle()
-    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val channels        by viewModel.channels.collectAsStateWithLifecycle()
+    val matchCounts     by viewModel.matchCountByChannel.collectAsStateWithLifecycle()
+    val isLoading       by viewModel.isLoading.collectAsStateWithLifecycle()
     val snackbar  = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
@@ -99,10 +100,11 @@ fun FiltersScreen(viewModel: FiltersViewModel, onBack: () -> Unit, onBrowseChann
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(channels, key = { it.filter.channelId }) { entry ->
                         ChannelCard(
-                            entry     = entry,
-                            onToggle  = { viewModel.toggleActive(entry.filter.channelId, entry.filter.isActive) },
-                            onDelete  = { viewModel.removeChannel(entry.filter) },
-                            onSaveKw  = { csv -> viewModel.setKeywordsFromCsv(entry.filter.channelId, csv) },
+                            entry      = entry,
+                            matchCount = matchCounts[entry.filter.channelId] ?: 0,
+                            onToggle   = { viewModel.toggleActive(entry.filter.channelId, entry.filter.isActive) },
+                            onDelete   = { viewModel.removeChannel(entry.filter) },
+                            onSaveKw   = { csv -> viewModel.setKeywordsFromCsv(entry.filter.channelId, csv) },
                         )
                     }
                 }
@@ -162,6 +164,7 @@ private fun AddChannelRow(isLoading: Boolean, onAdd: (String) -> Unit, onBrowse:
 @Composable
 private fun ChannelCard(
     entry: ChannelFilterWithKeywords,
+    matchCount: Int,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
     onSaveKw: (String) -> Unit,
@@ -196,6 +199,13 @@ private fun ChannelCard(
                             "@${filter.channelHandle}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (matchCount > 0) {
+                        Text(
+                            "$matchCount match${if (matchCount == 1) "" else "es"}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
