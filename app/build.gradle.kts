@@ -101,6 +101,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.work.runtime.ktx)
 
+    // DataStore
+    implementation(libs.androidx.datastore.preferences)
+
     // TDLib — drop tdlib.jar into app/libs/
     //         and libtdjni.so into app/src/main/jniLibs/<ABI>/
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))

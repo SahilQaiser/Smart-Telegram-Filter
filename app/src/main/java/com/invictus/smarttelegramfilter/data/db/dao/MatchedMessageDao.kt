@@ -55,6 +55,12 @@ interface MatchedMessageDao {
     @Query("DELETE FROM matched_messages WHERE isArchived = 1")
     suspend fun clearArchive()
 
+    @Query("UPDATE matched_messages SET isStarred = :isStarred WHERE id = :id")
+    suspend fun setStar(id: Long, isStarred: Boolean)
+
+    @Query("SELECT COUNT(*) FROM matched_messages WHERE isStarred = 1 AND isArchived = 0")
+    fun observeStarredCount(): Flow<Int>
+
     @Query("DELETE FROM matched_messages WHERE timestamp < :cutoffMs")
     suspend fun pruneOlderThan(cutoffMs: Long): Int
 }

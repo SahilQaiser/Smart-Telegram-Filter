@@ -1,6 +1,10 @@
 package com.invictus.smarttelegramfilter.di
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStoreFile
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import com.invictus.smarttelegramfilter.data.db.AppDatabase
 import com.invictus.smarttelegramfilter.data.db.dao.ChannelFilterDao
@@ -28,4 +32,9 @@ object AppModule {
 
     @Provides
     fun provideMatchedMessageDao(db: AppDatabase): MatchedMessageDao = db.matchedMessageDao()
+
+    @Provides
+    @Singleton
+    fun provideDataStore(@ApplicationContext ctx: Context): DataStore<Preferences> =
+        PreferenceDataStoreFactory.create { ctx.preferencesDataStoreFile("settings") }
 }

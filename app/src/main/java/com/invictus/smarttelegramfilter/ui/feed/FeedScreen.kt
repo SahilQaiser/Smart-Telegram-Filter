@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,7 +33,10 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -40,6 +44,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +52,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
@@ -89,14 +95,18 @@ import java.util.Locale
 fun FeedScreen(
     viewModel: FeedViewModel,
     onNavigateToFilters: () -> Unit,
+    onNavigateToSettings: () -> Unit,
 ) {
-    val messages        by viewModel.messages.collectAsStateWithLifecycle()
-    val hasMessages     by viewModel.hasMessages.collectAsStateWithLifecycle()
-    val unreadCount     by viewModel.unreadCount.collectAsStateWithLifecycle()
-    val channelKeywords by viewModel.channelKeywords.collectAsStateWithLifecycle()
-    val searchQuery     by viewModel.searchQuery.collectAsStateWithLifecycle()
-    val archivedMessages by viewModel.archivedMessages.collectAsStateWithLifecycle()
-    val archivedCount   by viewModel.archivedCount.collectAsStateWithLifecycle()
+    val messages           by viewModel.messages.collectAsStateWithLifecycle()
+    val hasMessages        by viewModel.hasMessages.collectAsStateWithLifecycle()
+    val unreadCount        by viewModel.unreadCount.collectAsStateWithLifecycle()
+    val channelKeywords    by viewModel.channelKeywords.collectAsStateWithLifecycle()
+    val searchQuery        by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val archivedMessages   by viewModel.archivedMessages.collectAsStateWithLifecycle()
+    val archivedCount      by viewModel.archivedCount.collectAsStateWithLifecycle()
+    val availableChannels  by viewModel.availableChannels.collectAsStateWithLifecycle()
+    val selectedChannelId  by viewModel.selectedChannelId.collectAsStateWithLifecycle()
+    val showStarredOnly    by viewModel.showStarredOnly.collectAsStateWithLifecycle()
 
     var showClearDialog  by remember { mutableStateOf(false) }
     var showArchive      by remember { mutableStateOf(false) }
@@ -132,6 +142,15 @@ fun FeedScreen(
     }
 
     Scaffold(
+        floatingActionButton = {
+            BadgedBox(badge = {
+                if (unreadCount > 0) Badge { Text(unreadCount.toString()) }
+            }) {
+                FloatingActionButton(onClick = onNavigateToFilters) {
+                    Icon(Icons.Default.FilterList, contentDescription = "Manage filters")
+                }
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -154,7 +173,16 @@ fun FeedScreen(
                             Icon(Icons.Default.MarkEmailRead, contentDescription = "Mark all read")
                         }
                     }
-                    // Archive icon with badge
+                    if (hasMessages) {
+                        IconButton(onClick = { viewModel.showStarredOnly.value = !showStarredOnly }) {
+                            Icon(
+                                if (showStarredOnly) Icons.Default.Star else Icons.Default.StarBorder,
+                                contentDescription = "Starred only",
+                                tint = if (showStarredOnly) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
                     IconButton(onClick = { showArchive = true }) {
                         BadgedBox(badge = {
                             if (archivedCount > 0) Badge { Text(archivedCount.toString()) }
@@ -167,12 +195,8 @@ fun FeedScreen(
                             Icon(Icons.Default.DeleteSweep, contentDescription = "Clear all")
                         }
                     }
-                    IconButton(onClick = onNavigateToFilters) {
-                        BadgedBox(badge = {
-                            if (unreadCount > 0) Badge { Text(unreadCount.toString()) }
-                        }) {
-                            Icon(Icons.Default.FilterList, contentDescription = "Manage filters")
-                        }
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
                 }
             )
@@ -210,10 +234,32 @@ fun FeedScreen(
                     ),
                 )
 
+                if (availableChannels.size > 1) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        item {
+                            FilterChip(
+                                selected = selectedChannelId == null,
+                                onClick  = { viewModel.selectChannel(null) },
+                                label    = { Text("All") },
+                            )
+                        }
+                        items(availableChannels) { (id, name) ->
+                            FilterChip(
+                                selected = selectedChannelId == id,
+                                onClick  = { viewModel.selectChannel(id) },
+                                label    = { Text(name) },
+                            )
+                        }
+                    }
+                }
+
                 if (messages.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            "No messages match \"$searchQuery\"",
+                            "No messages match your current filters",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -262,6 +308,7 @@ fun FeedScreen(
                                     message         = msg,
                                     expanded        = expanded,
                                     channelKeywords = channelKeywords[msg.channelId] ?: emptyList(),
+                                    onToggleStar    = { viewModel.toggleStar(msg) },
                                     onClick = {
                                         expandedIds.value = if (expanded)
                                             expandedIds.value - msg.id
@@ -417,6 +464,7 @@ private fun MessageCard(
     message: MatchedMessage,
     expanded: Boolean,
     channelKeywords: List<String>,
+    onToggleStar: () -> Unit,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -468,6 +516,15 @@ private fun MessageCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.alpha(0.7f),
                     )
+                    IconButton(onClick = onToggleStar, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            if (message.isStarred) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = "Star",
+                            tint = if (message.isStarred) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(

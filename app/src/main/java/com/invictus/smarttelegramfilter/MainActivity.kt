@@ -24,6 +24,7 @@ import com.invictus.smarttelegramfilter.ui.channelpicker.ChannelPickerScreen
 import com.invictus.smarttelegramfilter.ui.channelpicker.ChannelPickerViewModel
 import com.invictus.smarttelegramfilter.ui.filters.FiltersScreen
 import com.invictus.smarttelegramfilter.ui.filters.FiltersViewModel
+import com.invictus.smarttelegramfilter.ui.settings.SettingsScreen
 import com.invictus.smarttelegramfilter.ui.theme.SmartFilterTheme
 import dagger.hilt.android.AndroidEntryPoint
 import org.drinkless.tdlib.TdApi
@@ -32,6 +33,7 @@ private const val ROUTE_AUTH           = "auth"
 private const val ROUTE_FEED           = "feed"
 private const val ROUTE_FILTERS        = "filters"
 private const val ROUTE_CHANNEL_PICKER = "channel_picker"
+private const val ROUTE_SETTINGS       = "settings"
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -88,8 +90,9 @@ class MainActivity : ComponentActivity() {
                     }
                     composable(ROUTE_FEED) {
                         FeedScreen(
-                            viewModel           = hiltViewModel<FeedViewModel>(),
-                            onNavigateToFilters = { navController.navigate(ROUTE_FILTERS) },
+                            viewModel             = hiltViewModel<FeedViewModel>(),
+                            onNavigateToFilters   = { navController.navigate(ROUTE_FILTERS) },
+                            onNavigateToSettings  = { navController.navigate(ROUTE_SETTINGS) },
                         )
                     }
                     composable(ROUTE_FILTERS) {
@@ -101,6 +104,9 @@ class MainActivity : ComponentActivity() {
                     }
                     composable(ROUTE_CHANNEL_PICKER) {
                         ChannelPickerScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable(ROUTE_SETTINGS) {
+                        SettingsScreen(onBack = { navController.popBackStack() })
                     }
                 }
             }

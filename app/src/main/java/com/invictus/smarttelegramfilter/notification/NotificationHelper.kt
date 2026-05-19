@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import com.invictus.smarttelegramfilter.MainActivity
 import com.invictus.smarttelegramfilter.R
 import com.invictus.smarttelegramfilter.data.db.entity.MatchedMessage
+import com.invictus.smarttelegramfilter.data.preferences.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -19,6 +20,7 @@ import javax.inject.Singleton
 @Singleton
 class NotificationHelper @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val settingsRepo: SettingsRepository,
 ) {
     companion object {
         const val SERVICE_NOTIFICATION_ID = 1
@@ -62,7 +64,8 @@ class NotificationHelper @Inject constructor(
             .setSilent(true)
             .build()
 
-    fun notifyMatchedMessage(message: MatchedMessage) {
+    suspend fun notifyMatchedMessage(message: MatchedMessage) {
+        if (settingsRepo.isQuietNow()) return
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             action = "com.invictus.smarttelegramfilter.OPEN_MESSAGE"
             putExtra("message_id", message.id)
@@ -123,10 +126,13 @@ class NotificationHelper @Inject constructor(
     }
 }
 
-fun buildTelegramDeepLink(channelUsername: String, channelId: Long, messageId: Long): String =
-    if (channelUsername.isNotEmpty()) {
-        "https://t.me/$channelUsername/$messageId"
+fun buildTelegramDeepLink(channelUsername: String, channelId: Long, messageId: Long): String {
+    // TDLib encodes channel message IDs as serverMessageId << 20; recover the server ID for URLs.
+    val postId = messageId shr 20
+    return if (channelUsername.isNotEmpty()) {
+        "https://t.me/$channelUsername/$postId"
     } else {
         val rawId = channelId.toString().removePrefix("-100")
-        "tg://privatepost?channel=$rawId&post=$messageId"
+        "tg://privatepost?channel=$rawId&post=$postId"
     }
+}

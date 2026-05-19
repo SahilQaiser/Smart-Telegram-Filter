@@ -21,4 +21,5 @@ data class MatchedMessage(
     val timestamp: Long,
     val isRead: Boolean = false,
     val isArchived: Boolean = false,
+    val isStarred: Boolean = false,
 )

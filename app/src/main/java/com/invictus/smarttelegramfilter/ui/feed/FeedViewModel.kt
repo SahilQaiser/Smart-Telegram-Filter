@@ -21,29 +21,42 @@ class FeedViewModel @Inject constructor(
     private val filterRepo: FilterRepository,
 ) : ViewModel() {
 
-    val searchQuery = MutableStateFlow("")
+    val searchQuery       = MutableStateFlow("")
+    val selectedChannelId = MutableStateFlow<Long?>(null)
+    val showStarredOnly   = MutableStateFlow(false)
 
     private val allMessages = repo.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val messages: StateFlow<List<MatchedMessage>> = combine(allMessages, searchQuery) { msgs, q ->
-        if (q.isBlank()) msgs
-        else {
-            val lower = q.lowercase()
-            msgs.filter { msg ->
-                msg.textContent.contains(lower, ignoreCase = true) ||
-                msg.channelName.contains(lower, ignoreCase = true) ||
-                msg.matchedKeyword.contains(lower, ignoreCase = true) ||
-                msg.senderName.contains(lower, ignoreCase = true)
+    val messages: StateFlow<List<MatchedMessage>> =
+        combine(allMessages, searchQuery, selectedChannelId, showStarredOnly) { msgs, q, chId, starred ->
+            var r = msgs
+            if (chId != null)   r = r.filter { it.channelId == chId }
+            if (starred)        r = r.filter { it.isStarred }
+            if (q.isNotBlank()) {
+                val lower = q.lowercase()
+                r = r.filter {
+                    it.textContent.contains(lower, ignoreCase = true) ||
+                    it.channelName.contains(lower, ignoreCase = true) ||
+                    it.matchedKeyword.contains(lower, ignoreCase = true) ||
+                    it.senderName.contains(lower, ignoreCase = true)
+                }
             }
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+            r
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val hasMessages: StateFlow<Boolean> = allMessages
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    val availableChannels: StateFlow<List<Pair<Long, String>>> = allMessages
+        .map { msgs -> msgs.map { it.channelId to it.channelName }.distinctBy { it.first } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val unreadCount: StateFlow<Int> = repo.observeUnreadCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    val starredCount: StateFlow<Int> = repo.observeStarredCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     val archivedMessages: StateFlow<List<MatchedMessage>> = repo.observeArchived()
@@ -60,6 +73,8 @@ class FeedViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
+    fun selectChannel(id: Long?) { selectedChannelId.value = id }
+
     fun markRead(id: Long) = viewModelScope.launch { repo.markRead(id) }
     fun markAllRead() = viewModelScope.launch { repo.markAllRead() }
     fun archive(message: MatchedMessage) = viewModelScope.launch { repo.archive(message.id) }
@@ -67,4 +82,5 @@ class FeedViewModel @Inject constructor(
     fun delete(message: MatchedMessage) = viewModelScope.launch { repo.delete(message) }
     fun deleteAll() = viewModelScope.launch { repo.deleteAll() }
     fun clearArchive() = viewModelScope.launch { repo.clearArchive() }
+    fun toggleStar(message: MatchedMessage) = viewModelScope.launch { repo.setStar(message.id, !message.isStarred) }
 }

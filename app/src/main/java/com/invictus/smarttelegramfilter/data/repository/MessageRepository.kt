@@ -27,6 +27,9 @@ class MessageRepository @Inject constructor(private val dao: MatchedMessageDao) 
     suspend fun deleteAll() = dao.deleteAll()
     suspend fun clearArchive() = dao.clearArchive()
 
+    suspend fun setStar(id: Long, isStarred: Boolean) = dao.setStar(id, isStarred)
+    fun observeStarredCount(): Flow<Int> = dao.observeStarredCount()
+
     suspend fun pruneOlderThan30Days() {
         val cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30)
         dao.pruneOlderThan(cutoff)
