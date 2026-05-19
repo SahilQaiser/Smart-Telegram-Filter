@@ -14,6 +14,7 @@ data class MatchedMessage(
     val telegramMessageId: Long,
     val channelId: Long,
     val channelName: String,
+    val channelUsername: String = "",
     val senderName: String,
     val textContent: String,
     val matchedKeyword: String,

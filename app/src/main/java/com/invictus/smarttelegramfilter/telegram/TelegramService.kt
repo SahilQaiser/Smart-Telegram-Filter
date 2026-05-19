@@ -143,6 +143,7 @@ class TelegramService : Service() {
             telegramMessageId = msg.id,
             channelId = channelId,
             channelName = filter.channelName,
+            channelUsername = filter.channelHandle,
             senderName = sender,
             textContent = text,
             matchedKeyword = keyword,

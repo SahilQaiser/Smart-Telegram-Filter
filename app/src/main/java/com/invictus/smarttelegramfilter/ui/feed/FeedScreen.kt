@@ -40,6 +40,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
@@ -51,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -62,7 +64,10 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.Intent
+import android.net.Uri
 import com.invictus.smarttelegramfilter.data.db.entity.MatchedMessage
+import com.invictus.smarttelegramfilter.notification.buildTelegramDeepLink
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -204,6 +209,7 @@ fun FeedScreen(
 
 @Composable
 private fun MessageCard(message: MatchedMessage, expanded: Boolean, onClick: () -> Unit) {
+    val context = LocalContext.current
     val unread = !message.isRead
     Card(
         modifier = Modifier
@@ -272,7 +278,35 @@ private fun MessageCard(message: MatchedMessage, expanded: Boolean, onClick: () 
                         overflow = if (expanded) TextOverflow.Clip else TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(8.dp))
-                    KeywordChip(message.matchedKeyword)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        KeywordChip(message.matchedKeyword)
+                        if (expanded) {
+                            TextButton(
+                                onClick = {
+                                    val url = buildTelegramDeepLink(
+                                        message.channelUsername,
+                                        message.channelId,
+                                        message.telegramMessageId,
+                                    )
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                    )
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) {
+                                Text(
+                                    "Open in Telegram",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
