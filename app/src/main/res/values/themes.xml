@@ -1,0 +1,7 @@
+<resources>
+    <!-- Compose drives all theming; this XML theme only sets the window background
+         and suppresses the legacy action bar. -->
+    <style name="Theme.SmartTelegramFilter" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

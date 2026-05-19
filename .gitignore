@@ -1,0 +1,29 @@
+# Android / Gradle
+*.iml
+.gradle
+/local.properties
+local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+app/build
+/captures
+.externalNativeBuild
+.cxx
+.kotlin
+
+# TDLib binaries (build via ./gradlew setupTdlib)
+app/libs/*.jar
+app/src/main/jniLibs/
+app/src/main/jniLibs*/
+
+# TDLib build cache
+.tdlib_build/
+
+# IDE
+.codemie/
