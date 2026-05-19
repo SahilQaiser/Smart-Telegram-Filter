@@ -27,4 +27,6 @@ class FeedViewModel @Inject constructor(
     fun markAllRead() = viewModelScope.launch { repo.markAllRead() }
 
     fun delete(message: MatchedMessage) = viewModelScope.launch { repo.delete(message) }
+
+    fun deleteAll() = viewModelScope.launch { repo.deleteAll() }
 }

@@ -20,8 +20,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MarkEmailRead
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
@@ -32,18 +35,30 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,6 +75,26 @@ fun FeedScreen(
 ) {
     val messages    by viewModel.messages.collectAsStateWithLifecycle()
     val unreadCount by viewModel.unreadCount.collectAsStateWithLifecycle()
+
+    var showClearDialog by remember { mutableStateOf(false) }
+    val expandedIds     = remember { mutableStateOf(setOf<Long>()) }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear all messages?") },
+            text  = { Text("This will permanently delete all ${messages.size} matched messages.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteAll()
+                    showClearDialog = false
+                }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -88,6 +123,11 @@ fun FeedScreen(
                             Icon(Icons.Default.MarkEmailRead, contentDescription = "Mark all read")
                         }
                     }
+                    if (messages.isNotEmpty()) {
+                        IconButton(onClick = { showClearDialog = true }) {
+                            Icon(Icons.Default.DeleteSweep, contentDescription = "Clear all messages")
+                        }
+                    }
                     IconButton(onClick = onNavigateToFilters) {
                         BadgedBox(
                             badge = {
@@ -112,10 +152,50 @@ fun FeedScreen(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
             ) {
                 items(messages, key = { it.id }) { msg ->
-                    MessageCard(
-                        message = msg,
-                        onClick = { viewModel.markRead(msg.id) },
-                    )
+                    val expanded = msg.id in expandedIds.value
+                    val dismissState = rememberSwipeToDismissBoxState()
+
+                    LaunchedEffect(dismissState.currentValue) {
+                        if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
+                            viewModel.delete(msg)
+                        }
+                    }
+
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {
+                            val color = MaterialTheme.colorScheme.errorContainer
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(vertical = 0.dp)
+                                    .background(color, MaterialTheme.shapes.medium),
+                                contentAlignment = when (dismissState.dismissDirection) {
+                                    SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                                    else -> Alignment.CenterEnd
+                                },
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(horizontal = 20.dp),
+                                )
+                            }
+                        },
+                    ) {
+                        MessageCard(
+                            message  = msg,
+                            expanded = expanded,
+                            onClick  = {
+                                expandedIds.value = if (expanded)
+                                    expandedIds.value - msg.id
+                                else
+                                    expandedIds.value + msg.id
+                                if (!msg.isRead) viewModel.markRead(msg.id)
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -123,7 +203,7 @@ fun FeedScreen(
 }
 
 @Composable
-private fun MessageCard(message: MatchedMessage, onClick: () -> Unit) {
+private fun MessageCard(message: MatchedMessage, expanded: Boolean, onClick: () -> Unit) {
     val unread = !message.isRead
     Card(
         modifier = Modifier
@@ -188,8 +268,8 @@ private fun MessageCard(message: MatchedMessage, onClick: () -> Unit) {
                     Text(
                         text = highlightKeyword(message.textContent, message.matchedKeyword),
                         style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
+                        maxLines = if (expanded) Int.MAX_VALUE else 3,
+                        overflow = if (expanded) TextOverflow.Clip else TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(8.dp))
                     KeywordChip(message.matchedKeyword)
@@ -238,20 +318,56 @@ private fun EmptyFeed(modifier: Modifier = Modifier) {
     }
 }
 
+private val URL_REGEX = Regex("""https?://\S+""")
+
+private sealed interface Span {
+    val start: Int; val end: Int
+    data class Url(override val start: Int, override val end: Int, val url: String) : Span
+    data class Keyword(override val start: Int, override val end: Int) : Span
+}
+
 private fun highlightKeyword(text: String, keyword: String): androidx.compose.ui.text.AnnotatedString {
-    return buildAnnotatedString {
-        val lower = text.lowercase()
-        val kw = keyword.lowercase()
-        var start = 0
+    val lower = text.lowercase()
+    val kw = keyword.lowercase()
+
+    val spans = mutableListOf<Span>()
+    URL_REGEX.findAll(text).forEach { spans.add(Span.Url(it.range.first, it.range.last + 1, it.value)) }
+    if (kw.isNotEmpty()) {
+        var pos = 0
         while (true) {
-            val idx = lower.indexOf(kw, start)
-            if (idx == -1) { append(text.substring(start)); break }
-            append(text.substring(start, idx))
-            withStyle(SpanStyle(fontWeight = FontWeight.Bold, background = androidx.compose.ui.graphics.Color(0x40FFD700))) {
-                append(text.substring(idx, idx + kw.length))
+            val idx = lower.indexOf(kw, pos)
+            if (idx == -1) break
+            val kwEnd = idx + kw.length
+            if (spans.filterIsInstance<Span.Url>().none { idx in it.start until it.end }) {
+                spans.add(Span.Keyword(idx, kwEnd))
             }
-            start = idx + kw.length
+            pos = kwEnd
         }
+    }
+    spans.sortBy { it.start }
+
+    return buildAnnotatedString {
+        var cursor = 0
+        for (span in spans) {
+            if (span.start > cursor) append(text.substring(cursor, span.start))
+            when (span) {
+                is Span.Url -> withLink(
+                    LinkAnnotation.Url(
+                        span.url,
+                        TextLinkStyles(SpanStyle(
+                            color = androidx.compose.ui.graphics.Color(0xFF1565C0),
+                            textDecoration = TextDecoration.Underline,
+                        ))
+                    )
+                ) { append(text.substring(span.start, span.end)) }
+                is Span.Keyword -> withStyle(SpanStyle(
+                    fontWeight = FontWeight.Bold,
+                    background = androidx.compose.ui.graphics.Color(0x40FFD700),
+                )) { append(text.substring(span.start, span.end)) }
+            }
+            cursor = span.end
+        }
+        if (cursor < text.length) append(text.substring(cursor))
     }
 }
 

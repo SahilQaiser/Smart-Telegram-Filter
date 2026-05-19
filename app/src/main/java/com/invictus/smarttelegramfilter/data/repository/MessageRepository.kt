@@ -29,4 +29,6 @@ class MessageRepository @Inject constructor(private val dao: MatchedMessageDao) 
         val cutoff = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30)
         dao.pruneOlderThan(cutoff)
     }
+
+    suspend fun deleteAll() = dao.deleteAll()
 }

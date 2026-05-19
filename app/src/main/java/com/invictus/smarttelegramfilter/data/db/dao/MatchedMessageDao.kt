@@ -35,4 +35,7 @@ interface MatchedMessageDao {
 
     @Query("DELETE FROM matched_messages WHERE timestamp < :cutoffMs")
     suspend fun pruneOlderThan(cutoffMs: Long): Int
+
+    @Query("DELETE FROM matched_messages")
+    suspend fun deleteAll()
 }
